@@ -1,0 +1,22 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: concurrency-lab
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+concurrency-lab:
+  thread-pool:
+    core-pool-size: 4
+    maximum-pool-size: 8
+    queue-capacity: 64
+    keep-alive-seconds: 60
+    allow-core-thread-time-out: false
+    rejection-policy: ABORT
+    max-batch-size: 1000

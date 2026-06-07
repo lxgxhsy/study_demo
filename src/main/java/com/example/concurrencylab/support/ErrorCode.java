@@ -1,0 +1,10 @@
+package com.example.concurrencylab.support;
+
+public enum ErrorCode {
+    INVALID_THREAD_POOL_CONFIG,
+    QUEUE_CAPACITY_TOO_SMALL,
+    UNSUPPORTED_REJECTION_POLICY,
+    INVALID_TASK_REQUEST,
+    ID_SEGMENT_ALLOC_FAILED,
+    ID_BATCH_SIZE_TOO_LARGE
+}

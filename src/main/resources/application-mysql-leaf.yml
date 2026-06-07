@@ -1,0 +1,19 @@
+spring:
+  config:
+    activate:
+      on-profile: mysql-leaf
+  datasource:
+    url: ${MYSQL_LEAF_JDBC_URL:jdbc:mysql://localhost:3306/concurrency_lab?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true}
+    username: ${MYSQL_LEAF_USERNAME:root}
+    password: ${MYSQL_LEAF_PASSWORD:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  sql:
+    init:
+      mode: never
+
+concurrency-lab:
+  profile-purpose: "leaf-segment-concurrency-validation"
+  id:
+    default-step: 1000
+    preload-threshold-ratio: 0.1
+    max-batch-size: 10000

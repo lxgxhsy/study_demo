@@ -1,0 +1,15 @@
+target/
+.idea/
+.vscode/
+*.iml
+*.log
+*.tmp
+*.bak
+
+# Local environment overrides
+.env
+.env.*
+
+# OS files
+Thumbs.db
+.DS_Store
