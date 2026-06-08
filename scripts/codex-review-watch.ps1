@@ -1,6 +1,7 @@
 param(
     [string]$Workspace = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path,
     [int]$IntervalSeconds = 60,
+    [int]$ReviewTimeoutSeconds = 600,
     [switch]$Once,
     [switch]$ReviewCurrentHead
 )
@@ -21,6 +22,76 @@ function Write-WatchLog {
 
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     Add-Content -Path $logPath -Value "[$timestamp] $Message" -Encoding UTF8
+}
+
+function ConvertTo-ProcessArgumentString {
+    param([string[]]$Arguments)
+
+    $quoted = foreach ($argument in $Arguments) {
+        if ($null -eq $argument) {
+            '""'
+        } elseif ($argument -notmatch '[\s"]') {
+            $argument
+        } else {
+            '"' + ($argument -replace '\\', '\\' -replace '"', '\"') + '"'
+        }
+    }
+
+    return ($quoted -join " ")
+}
+
+function Invoke-CodexProcess {
+    param(
+        [string[]]$Arguments,
+        [int]$TimeoutSeconds
+    )
+
+    $codexCommand = Get-Command codex -ErrorAction Stop
+    $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $startInfo.FileName = $codexCommand.Source
+    $startInfo.Arguments = ConvertTo-ProcessArgumentString -Arguments $Arguments
+    $startInfo.WorkingDirectory = $Workspace
+    $startInfo.UseShellExecute = $false
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+
+    $process = New-Object System.Diagnostics.Process
+    $process.StartInfo = $startInfo
+
+    [void]$process.Start()
+    $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+    $stderrTask = $process.StandardError.ReadToEndAsync()
+    $timeoutMs = [Math]::Max(1, $TimeoutSeconds) * 1000
+    $completed = $process.WaitForExit($timeoutMs)
+
+    if (-not $completed) {
+        try {
+            & taskkill.exe /PID $process.Id /T /F *> $null
+        } catch {
+            try {
+                $process.Kill()
+            } catch {
+                # Best effort only; the timeout is still reported below.
+            }
+        }
+
+        return [pscustomobject]@{
+            ExitCode = 124
+            TimedOut = $true
+            StdOut = ""
+            StdErr = "codex review timed out after $TimeoutSeconds seconds"
+        }
+    }
+
+    [void]$stdoutTask.Wait(30000)
+    [void]$stderrTask.Wait(30000)
+
+    return [pscustomobject]@{
+        ExitCode = $process.ExitCode
+        TimedOut = $false
+        StdOut = $stdoutTask.Result
+        StdErr = $stderrTask.Result
+    }
 }
 
 function Invoke-GitText {
@@ -150,49 +221,12 @@ function Get-PendingCommits {
     return @($text -split "`r?`n")
 }
 
-function New-ReviewPrompt {
-    param(
-        [object]$Meta,
-        [string]$ChangedFiles
-    )
-
-@"
-你是这个仓库的实时代码评审员。请审查 commit $($Meta.Sha)，只输出审查报告，不要修改仓库文件。
-
-硬性流程：
-1. 必须先使用 web search 检索最新资料，再评审。优先官方文档、JDK/Spring Boot 文档、成熟开源项目、GitHub 上多数派实现和近期工程实践。报告中列出参考 URL；如果搜索证据弱，也要写清楚搜索方向和不确定性。
-2. 你要有自己的工程品味，不做顺从式总结。GitHub 多数派是证据，不是盲从；如果本项目的取舍更好，可以明确维护当前做法。
-3. 重点去掉代码骨架里的 vibe coding 味道：空泛脚手架、为了像项目而堆层、缺少业务/并发不变量、命名泛化、魔法数、DTO 贫血但契约不清、异常边界不实、测试只覆盖 happy path、README 与代码事实脱节、看起来像生成但没有工程约束的代码。
-4. 这个项目是 Java 17 + Spring Boot 3.x 的 concurrency lab。评审时特别关注动态线程池、拒绝策略、队列容量调整、指标统计、Leaf-style segment ID、并发安全、压测脚本和测试可信度。
-5. Findings 必须按严重程度排序。只有真实会导致错误、回归、维护性明显下降或背离主流工程规则的问题才列为需要修改；不要输出泛泛建议。
-
-输出格式：
-- 结论：阻塞 / 需要修改 / 可接受。
-- Findings：每条包含 文件:行号、问题、为什么与官方/多数派/本项目边界冲突、建议改法。
-- Vibe Coding 检查：指出是否有脚手架味，哪些可以删、收紧或改成真实工程契约。
-- Web Evidence：列出 URL 和对应判断依据。
-- 测试与验证：说明现有测试缺口和最小验证命令。
-
-Commit metadata:
-- SHA: $($Meta.Sha)
-- Author: $($Meta.AuthorName) <$($Meta.AuthorEmail)>
-- Date: $($Meta.AuthorDate)
-- Subject: $($Meta.Subject)
-
-Changed files:
-```text
-$ChangedFiles
-```
-"@
-}
-
 function Invoke-CodexCommitReview {
     param([string]$Sha)
 
     $meta = Get-CommitMetadata -Sha $Sha
     $changedFiles = Get-ChangedFiles -Sha $Sha
     $reviewPath = Get-ReviewPath -Meta $meta
-    $prompt = New-ReviewPrompt -Meta $meta -ChangedFiles $changedFiles
 
     $header = @"
 # Code Review: $($meta.ShortSha) $($meta.Subject)
@@ -201,13 +235,14 @@ function Invoke-CodexCommitReview {
 - Author: $($meta.AuthorName) <$($meta.AuthorEmail)>
 - Commit date: $($meta.AuthorDate)
 - Reviewed at: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss zzz")
-- Mode: codex review --commit with live web search
+- Mode: codex --search exec review --commit
+- Timeout seconds: $ReviewTimeoutSeconds
 
 ## Changed Files
 
-```text
+~~~text
 $changedFiles
-```
+~~~
 
 ## Review
 
@@ -216,27 +251,46 @@ $changedFiles
     Set-Content -Path $reviewPath -Value $header -Encoding UTF8
     Write-WatchLog "review start sha=$Sha path=$reviewPath"
 
-    $codexArgs = @("--search", "-C", $Workspace, "-s", "read-only", "-a", "never", "review", "--commit", $Sha, "-")
-    $reviewOutput = $null
-    $exitCode = 0
+    $codexArgs = @("--search", "exec", "-C", $Workspace, "-s", "read-only", "--ephemeral", "review", "--commit", $Sha)
+    $result = $null
 
     try {
-        $reviewOutput = $prompt | & codex @codexArgs 2>&1
-        $exitCode = $LASTEXITCODE
+        $result = Invoke-CodexProcess -Arguments $codexArgs -TimeoutSeconds $ReviewTimeoutSeconds
     } catch {
-        $exitCode = 1
-        $reviewOutput = @("codex review invocation failed: $($_.Exception.Message)")
+        $result = [pscustomobject]@{
+            ExitCode = 1
+            TimedOut = $false
+            StdOut = ""
+            StdErr = "codex review invocation failed: $($_.Exception.Message)"
+        }
     }
 
-    if ($null -eq $reviewOutput -or $reviewOutput.Count -eq 0) {
-        $reviewOutput = @("(codex review produced no output)")
+    $reviewOutput = @()
+    if (-not [string]::IsNullOrWhiteSpace($result.StdOut)) {
+        $reviewOutput += "### stdout"
+        $reviewOutput += ""
+        $reviewOutput += "~~~text"
+        $reviewOutput += $result.StdOut.TrimEnd()
+        $reviewOutput += "~~~"
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($result.StdErr)) {
+        $reviewOutput += "### stderr"
+        $reviewOutput += ""
+        $reviewOutput += "~~~text"
+        $reviewOutput += $result.StdErr.TrimEnd()
+        $reviewOutput += "~~~"
+    }
+
+    if ($reviewOutput.Count -eq 0) {
+        $reviewOutput += "(codex review produced no output)"
     }
 
     Add-Content -Path $reviewPath -Value ($reviewOutput -join "`n") -Encoding UTF8
-    Add-Content -Path $reviewPath -Value "`n`n---`nReview command exit code: $exitCode`n" -Encoding UTF8
+    Add-Content -Path $reviewPath -Value "`n`n---`nReview command exit code: $($result.ExitCode)`nTimed out: $($result.TimedOut)`n" -Encoding UTF8
 
-    if ($exitCode -ne 0) {
-        Write-WatchLog "review failed sha=$Sha exitCode=$exitCode"
+    if ($result.ExitCode -ne 0) {
+        Write-WatchLog "review failed sha=$Sha exitCode=$($result.ExitCode) timedOut=$($result.TimedOut)"
         throw "codex review failed for $Sha; see $reviewPath"
     }
 
@@ -282,13 +336,15 @@ if (Test-Path $stopPath) {
 }
 
 Set-Content -Path $pidPath -Value $PID -Encoding ASCII
-Write-WatchLog "started pid=$PID workspace=$Workspace intervalSeconds=$IntervalSeconds once=$Once reviewCurrentHead=$ReviewCurrentHead"
+Write-WatchLog "started pid=$PID workspace=$Workspace intervalSeconds=$IntervalSeconds reviewTimeoutSeconds=$ReviewTimeoutSeconds once=$Once reviewCurrentHead=$ReviewCurrentHead"
 
+$script:HadCycleError = $false
 try {
     while ($true) {
         try {
             Invoke-ReviewCycle
         } catch {
+            $script:HadCycleError = $true
             Write-WatchLog "cycle error: $($_.Exception.Message)"
         }
 
@@ -317,4 +373,8 @@ try {
         Remove-Item -Path $pidPath -Force
     }
     Write-WatchLog "stopped pid=$PID"
+}
+
+if ($Once -and $script:HadCycleError) {
+    exit 1
 }
