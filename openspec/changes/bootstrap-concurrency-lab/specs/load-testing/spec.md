@@ -16,12 +16,12 @@ The system shall provide a repeatable k6-based way to pressure-test thread pool 
 
 - **WHEN** the thread pool experiment matrix is run
 - **THEN** it includes baseline, small queue, large queue, AbortPolicy, CallerRunsPolicy, CPU task, and sleep task cases
-- **AND** each case reports QPS, average latency, P95 latency, P99 latency, error count, rejected count, average wait time, and average execution time
+- **AND** each case reports QPS, average latency, P95 latency, P99 latency, error count, rejected count, caller-runs count, average wait time, and average execution time
 
 #### Scenario: Capture backpressure behavior
 
 - **WHEN** CallerRunsPolicy is tested against AbortPolicy under comparable payload and concurrency
-- **THEN** the report explains how rejection, caller-side latency, queue wait time, and throughput changed
+- **THEN** the report explains how rejection, caller-runs count, caller-side latency, queue wait time, and throughput changed
 
 ### Requirement: Repeatable ID Generation Pressure Test
 

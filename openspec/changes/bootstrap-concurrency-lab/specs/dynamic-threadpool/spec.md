@@ -48,8 +48,8 @@ The system shall expose measurable executor state for pressure-test interpretati
 #### Scenario: Metrics during load
 
 - **WHEN** tasks are submitted under load
-- **THEN** `GET /api/lab/thread-pool/metrics` returns active thread count, pool size, largest pool size, queue size, queue capacity, task count, completed task count, submitted task count, rejected task count, rejection policy, keep-alive seconds, and allow-core-timeout flag
-- **AND** the response includes `waitTimeMsAvg`, `executionTimeMsAvg`, `waitSampleCount`, `executionSampleCount`, and `metricsResetAt`
+- **THEN** `GET /api/lab/thread-pool/metrics` returns active thread count, pool size, largest pool size, queue size, queue capacity, task count, completed task count, submitted task count, rejected task count, caller-runs task count, rejection policy, keep-alive seconds, and allow-core-timeout flag
+- **AND** the response includes `waitTimeMsAvg`, `executionTimeMsAvg`, `waitSampleCount`, `executionSampleCount`, `metricsGeneration`, and `metricsResetAt`
 
 #### Scenario: Metrics units and window
 
@@ -60,9 +60,18 @@ The system shall expose measurable executor state for pressure-test interpretati
 #### Scenario: Reset metrics
 
 - **WHEN** a client requests `POST /api/lab/thread-pool/metrics/reset`
-- **THEN** cumulative submitted, completed, rejected, wait, and execution counters are reset
+- **THEN** cumulative submitted, completed, rejected, caller-runs, wait, and execution counters are reset
 - **AND** `metricsResetAt` is updated
+- **AND** `metricsGeneration` is incremented
 - **AND** real-time values such as active thread count and queue size are not falsified
+- **AND** tasks submitted before the reset do not update the new generation's completed count, wait sample count, or execution sample count when they finish later
+
+#### Scenario: Caller-runs is tracked separately
+
+- **WHEN** the configured rejection policy is `CALLER_RUNS`
+- **AND** the executor is saturated
+- **THEN** tasks run in the submitting thread are counted in `callerRunsCount` and `callerRunsTaskCount`
+- **AND** those tasks are not counted as rejected tasks
 
 ### Requirement: Simulated Task Submission
 
@@ -72,19 +81,19 @@ The system shall provide configurable simulated tasks for load testing.
 
 - **WHEN** a client submits `POST /api/lab/thread-pool/tasks/sleep` with `count` and `durationMs`
 - **THEN** the system schedules accepted tasks
-- **AND** the response includes `acceptedCount`, `rejectedCount`, `submittedCount`, and `requestId`
+- **AND** the response includes `acceptedCount`, `rejectedCount`, `callerRunsCount`, `submittedCount`, and `requestId`
 
 #### Scenario: Submit CPU tasks
 
 - **WHEN** a client submits `POST /api/lab/thread-pool/tasks/cpu` with `count` and `iterations`
 - **THEN** the system schedules accepted tasks
-- **AND** the response includes `acceptedCount`, `rejectedCount`, `submittedCount`, and `requestId`
+- **AND** the response includes `acceptedCount`, `rejectedCount`, `callerRunsCount`, `submittedCount`, and `requestId`
 
 #### Scenario: Submit mixed tasks
 
 - **WHEN** a client submits `POST /api/lab/thread-pool/tasks/mixed` with `count`, `durationMs`, and `iterations`
 - **THEN** the system schedules accepted tasks
-- **AND** the response includes `acceptedCount`, `rejectedCount`, `submittedCount`, and `requestId`
+- **AND** the response includes `acceptedCount`, `rejectedCount`, `callerRunsCount`, `submittedCount`, and `requestId`
 
 #### Scenario: Reject invalid task request
 

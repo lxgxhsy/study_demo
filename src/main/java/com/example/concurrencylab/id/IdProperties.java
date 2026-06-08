@@ -8,6 +8,7 @@ public class IdProperties {
     private long defaultStep = 1000;
     private double preloadThresholdRatio = 0.1;
     private int maxBatchSize = 10000;
+    private long preloadWaitTimeoutMs = 5000;
 
     public long getDefaultStep() {
         return defaultStep;
@@ -31,5 +32,13 @@ public class IdProperties {
 
     public void setMaxBatchSize(int maxBatchSize) {
         this.maxBatchSize = maxBatchSize;
+    }
+
+    public long getPreloadWaitTimeoutMs() {
+        return preloadWaitTimeoutMs;
+    }
+
+    public void setPreloadWaitTimeoutMs(long preloadWaitTimeoutMs) {
+        this.preloadWaitTimeoutMs = preloadWaitTimeoutMs;
     }
 }

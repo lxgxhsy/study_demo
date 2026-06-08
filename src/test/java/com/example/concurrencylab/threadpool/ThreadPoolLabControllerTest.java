@@ -10,6 +10,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -91,6 +92,24 @@ class ThreadPoolLabControllerTest {
     }
 
     @Test
+    void unsupportedRejectionPolicyIsRejectedWithStableCode() throws Exception {
+        mockMvc.perform(put("/api/lab/thread-pool/config")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "corePoolSize": 1,
+                                  "maximumPoolSize": 1,
+                                  "queueCapacity": 1,
+                                  "keepAliveSeconds": 60,
+                                  "allowCoreThreadTimeOut": false,
+                                  "rejectionPolicy": "DISCARD"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code", is(ErrorCode.UNSUPPORTED_REJECTION_POLICY.name())));
+    }
+
+    @Test
     void sleepTaskSubmissionReturnsAcceptedAndRejectedCounts() throws Exception {
         mockMvc.perform(put("/api/lab/thread-pool/config")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -115,6 +134,9 @@ class ThreadPoolLabControllerTest {
                                 }
                                 """))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.acceptedCount", is(2)))
+                .andExpect(jsonPath("$.rejectedCount", is(18)))
+                .andExpect(jsonPath("$.callerRunsCount", is(0)))
                 .andExpect(jsonPath("$.submittedCount", is(20)))
                 .andExpect(jsonPath("$.requestId", notNullValue()));
     }
@@ -137,7 +159,90 @@ class ThreadPoolLabControllerTest {
         mockMvc.perform(get("/api/lab/thread-pool/metrics"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.submittedTaskCount", is(0)))
+                .andExpect(jsonPath("$.completedTaskCount", is(0)))
                 .andExpect(jsonPath("$.rejectedTaskCount", is(0)))
+                .andExpect(jsonPath("$.callerRunsTaskCount", is(0)))
                 .andExpect(jsonPath("$.metricsResetAt", notNullValue()));
+    }
+
+    @Test
+    void callerRunsIsTrackedSeparatelyFromRejectedTasks() throws Exception {
+        mockMvc.perform(put("/api/lab/thread-pool/config")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "corePoolSize": 1,
+                                  "maximumPoolSize": 1,
+                                  "queueCapacity": 1,
+                                  "keepAliveSeconds": 60,
+                                  "allowCoreThreadTimeOut": false,
+                                  "rejectionPolicy": "CALLER_RUNS"
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/lab/thread-pool/tasks/sleep")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "count": 6,
+                                  "durationMs": 50
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.acceptedCount", is(6)))
+                .andExpect(jsonPath("$.rejectedCount", is(0)))
+                .andExpect(jsonPath("$.callerRunsCount", greaterThan(0)))
+                .andExpect(jsonPath("$.submittedCount", is(6)));
+
+        mockMvc.perform(get("/api/lab/thread-pool/metrics"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.rejectedTaskCount", is(0)))
+                .andExpect(jsonPath("$.callerRunsTaskCount", greaterThan(0)));
+    }
+
+    @Test
+    void metricsResetStartsNewGenerationAndIgnoresOldRunningTasks() throws Exception {
+        mockMvc.perform(put("/api/lab/thread-pool/config")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "corePoolSize": 1,
+                                  "maximumPoolSize": 1,
+                                  "queueCapacity": 4,
+                                  "keepAliveSeconds": 60,
+                                  "allowCoreThreadTimeOut": false,
+                                  "rejectionPolicy": "ABORT"
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/lab/thread-pool/tasks/sleep")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "count": 5,
+                                  "durationMs": 150
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.acceptedCount", is(5)));
+
+        mockMvc.perform(get("/api/lab/thread-pool/metrics"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.metricsGeneration", is(0)));
+
+        mockMvc.perform(post("/api/lab/thread-pool/metrics/reset"))
+                .andExpect(status().isNoContent());
+
+        Thread.sleep(900);
+
+        mockMvc.perform(get("/api/lab/thread-pool/metrics"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.metricsGeneration", is(1)))
+                .andExpect(jsonPath("$.submittedTaskCount", is(0)))
+                .andExpect(jsonPath("$.completedTaskCount", is(0)))
+                .andExpect(jsonPath("$.waitSampleCount", is(0)))
+                .andExpect(jsonPath("$.executionSampleCount", is(0)));
     }
 }

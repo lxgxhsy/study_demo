@@ -21,6 +21,12 @@ public class OrderLabService {
     public OrderResponse createOrder(OrderRequest request) {
         IdResponse id = idGenerator.nextId(request.normalizedBizTag());
         TaskSubmissionResponse task = threadPoolManager.submitSleepTasks(new SleepTaskRequest(1, request.asyncTaskDurationMs()));
-        return new OrderResponse(id.id(), task.acceptedCount(), task.rejectedCount(), task.requestId());
+        return new OrderResponse(
+                id.id(),
+                task.acceptedCount(),
+                task.rejectedCount(),
+                task.callerRunsCount(),
+                task.requestId()
+        );
     }
 }

@@ -6,6 +6,12 @@ target/
 *.tmp
 *.bak
 
+# Codex watcher runtime state
+docs/review/.codex-review-watch.pid
+docs/review/.codex-review-watch.stop
+docs/review/.last-reviewed-head
+docs/review/watcher.log
+
 # Local environment overrides
 .env
 .env.*

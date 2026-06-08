@@ -12,11 +12,14 @@ export const options = {
 };
 
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
+const TASK_TYPE = __ENV.TASK_TYPE || 'sleep';
 const TASK_COUNT = Number(__ENV.TASK_COUNT || 20);
 const DURATION_MS = Number(__ENV.TASK_DURATION_MS || 100);
+const ITERATIONS = Number(__ENV.TASK_ITERATIONS || 100000);
 
 const acceptedTasks = new Counter('accepted_tasks');
 const rejectedTasks = new Counter('rejected_tasks');
+const callerRunsTasks = new Counter('caller_runs_tasks');
 const taskSubmitDuration = new Trend('task_submit_duration_ms');
 
 export function setup() {
@@ -41,13 +44,10 @@ export function setup() {
 }
 
 export default function () {
-  const payload = JSON.stringify({
-    count: TASK_COUNT,
-    durationMs: DURATION_MS,
-  });
+  const payload = JSON.stringify(taskPayload());
 
   const started = Date.now();
-  const res = http.post(`${BASE_URL}/api/lab/thread-pool/tasks/sleep`, payload, {
+  const res = http.post(`${BASE_URL}/api/lab/thread-pool/tasks/${TASK_TYPE}`, payload, {
     headers: { 'Content-Type': 'application/json' },
   });
   taskSubmitDuration.add(Date.now() - started);
@@ -60,9 +60,32 @@ export default function () {
   if (ok) {
     acceptedTasks.add(Number(res.json('acceptedCount') || 0));
     rejectedTasks.add(Number(res.json('rejectedCount') || 0));
+    callerRunsTasks.add(Number(res.json('callerRunsCount') || 0));
   }
 
   sleep(Number(__ENV.SLEEP_BETWEEN_REQUESTS || 0.2));
+}
+
+function taskPayload() {
+  if (TASK_TYPE === 'cpu') {
+    return {
+      count: TASK_COUNT,
+      iterations: ITERATIONS,
+    };
+  }
+
+  if (TASK_TYPE === 'mixed') {
+    return {
+      count: TASK_COUNT,
+      durationMs: DURATION_MS,
+      iterations: ITERATIONS,
+    };
+  }
+
+  return {
+    count: TASK_COUNT,
+    durationMs: DURATION_MS,
+  };
 }
 
 export function teardown() {

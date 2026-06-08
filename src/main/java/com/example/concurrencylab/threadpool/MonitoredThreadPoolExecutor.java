@@ -27,8 +27,8 @@ public class MonitoredThreadPoolExecutor extends ThreadPoolExecutor {
 
     @Override
     public void execute(Runnable command) {
-        counters.incrementSubmitted();
-        super.execute(new TimedRunnable(command, counters));
+        long generation = counters.registerSubmittedAndGetGeneration();
+        super.execute(new TimedRunnable(command, counters, generation));
     }
 
     public void applyRejectionPolicy(RejectionPolicy policy) {
@@ -60,9 +60,10 @@ public class MonitoredThreadPoolExecutor extends ThreadPoolExecutor {
                 queue.size(),
                 queue.capacity(),
                 getTaskCount(),
-                getCompletedTaskCount(),
+                counters.completedTaskCount(),
                 counters.submittedTaskCount(),
                 counters.rejectedTaskCount(),
+                counters.callerRunsTaskCount(),
                 rejectionPolicy,
                 getKeepAliveTime(TimeUnit.SECONDS),
                 allowsCoreThreadTimeOut(),
@@ -70,6 +71,7 @@ public class MonitoredThreadPoolExecutor extends ThreadPoolExecutor {
                 counters.executionTimeMsAvg(),
                 counters.waitSampleCount(),
                 counters.executionSampleCount(),
+                counters.metricsGeneration(),
                 counters.metricsResetAt()
         );
     }
@@ -78,18 +80,31 @@ public class MonitoredThreadPoolExecutor extends ThreadPoolExecutor {
         return counters.rejectedTaskCount();
     }
 
+    public long callerRunsTaskCount() {
+        return counters.callerRunsTaskCount();
+    }
+
     private RejectedExecutionHandler toHandler(RejectionPolicy policy) {
         return switch (policy) {
             case ABORT -> (r, executor) -> {
-                counters.incrementRejected();
+                counters.incrementRejected(metricsGenerationOf(r));
                 throw new RejectedExecutionException("Task rejected from lab thread pool");
             };
             case CALLER_RUNS -> (r, executor) -> {
-                counters.incrementRejected();
                 if (!executor.isShutdown()) {
+                    counters.incrementCallerRuns(metricsGenerationOf(r));
                     r.run();
+                } else {
+                    counters.incrementRejected(metricsGenerationOf(r));
                 }
             };
         };
+    }
+
+    private long metricsGenerationOf(Runnable runnable) {
+        if (runnable instanceof TimedRunnable timedRunnable) {
+            return timedRunnable.metricsGeneration();
+        }
+        return counters.currentGeneration();
     }
 }

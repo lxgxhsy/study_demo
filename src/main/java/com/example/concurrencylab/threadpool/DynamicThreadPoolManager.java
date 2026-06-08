@@ -101,6 +101,7 @@ public class DynamicThreadPoolManager {
     private TaskSubmissionResponse submitBatch(int count, Runnable task) {
         String requestId = UUID.randomUUID().toString();
         long rejectedBefore = executor.rejectedTaskCount();
+        long callerRunsBefore = executor.callerRunsTaskCount();
         int thrownRejections = 0;
         for (int i = 0; i < count; i++) {
             try {
@@ -109,9 +110,13 @@ public class DynamicThreadPoolManager {
                 thrownRejections++;
             }
         }
-        int rejectedCount = Math.toIntExact(executor.rejectedTaskCount() - rejectedBefore);
-        int acceptedCount = Math.max(0, count - Math.max(rejectedCount, thrownRejections));
-        return new TaskSubmissionResponse(acceptedCount, rejectedCount, count, requestId);
+        int rejectedCount = Math.max(
+                thrownRejections,
+                Math.toIntExact(Math.max(0, executor.rejectedTaskCount() - rejectedBefore))
+        );
+        int callerRunsCount = Math.toIntExact(Math.max(0, executor.callerRunsTaskCount() - callerRunsBefore));
+        int acceptedCount = Math.max(0, count - rejectedCount);
+        return new TaskSubmissionResponse(acceptedCount, rejectedCount, callerRunsCount, count, requestId);
     }
 
     private void validateConfig(ThreadPoolConfigRequest request) {

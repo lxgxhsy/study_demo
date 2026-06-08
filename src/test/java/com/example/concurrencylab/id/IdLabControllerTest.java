@@ -12,6 +12,18 @@ import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.notNullValue;
@@ -34,6 +46,9 @@ class IdLabControllerTest {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private SegmentIdGenerator idGenerator;
 
     @BeforeEach
     void clearLeafState() {
@@ -85,5 +100,39 @@ class IdLabControllerTest {
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code", is(ErrorCode.ID_BATCH_SIZE_TOO_LARGE.name())));
+    }
+
+    @Test
+    void concurrentGenerationDoesNotDuplicateIdsInFunctionalProfile() throws Exception {
+        int threadCount = 8;
+        int idsPerThread = 25;
+        Set<Long> ids = ConcurrentHashMap.newKeySet();
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(threadCount);
+        List<Future<?>> futures = new ArrayList<>();
+
+        try {
+            for (int i = 0; i < threadCount; i++) {
+                futures.add(executor.submit(() -> {
+                    start.await(5, TimeUnit.SECONDS);
+                    for (int j = 0; j < idsPerThread; j++) {
+                        ids.add(idGenerator.nextId("parallel").id());
+                    }
+                    return null;
+                }));
+            }
+
+            start.countDown();
+            for (Future<?> future : futures) {
+                future.get(10, TimeUnit.SECONDS);
+            }
+        } finally {
+            executor.shutdownNow();
+        }
+
+        assertEquals(threadCount * idsPerThread, ids.size());
+        LeafIdMetricsResponse metrics = idGenerator.metrics("parallel");
+        assertTrue(metrics.dbAllocationCount() > 1);
+        assertTrue(metrics.segmentSwitchCount() > 1);
     }
 }

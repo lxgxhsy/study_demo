@@ -6,34 +6,69 @@ import java.util.concurrent.atomic.AtomicLong;
 public class ThreadPoolCounters {
 
     private final AtomicLong submittedTaskCount = new AtomicLong();
+    private final AtomicLong completedTaskCount = new AtomicLong();
     private final AtomicLong rejectedTaskCount = new AtomicLong();
+    private final AtomicLong callerRunsTaskCount = new AtomicLong();
     private final AtomicLong waitTimeNanosTotal = new AtomicLong();
     private final AtomicLong executionTimeNanosTotal = new AtomicLong();
     private final AtomicLong waitSampleCount = new AtomicLong();
     private final AtomicLong executionSampleCount = new AtomicLong();
+    private final AtomicLong metricsGeneration = new AtomicLong();
     private volatile Instant metricsResetAt = Instant.now();
 
-    public long incrementSubmitted() {
-        return submittedTaskCount.incrementAndGet();
+    public synchronized long registerSubmittedAndGetGeneration() {
+        long generation = metricsGeneration.get();
+        submittedTaskCount.incrementAndGet();
+        return generation;
     }
 
-    public long incrementRejected() {
+    public synchronized long incrementRejected(long generation) {
+        if (generation != metricsGeneration.get()) {
+            return rejectedTaskCount.get();
+        }
         return rejectedTaskCount.incrementAndGet();
     }
 
-    public void recordWaitNanos(long nanos) {
+    public synchronized long incrementCallerRuns(long generation) {
+        if (generation != metricsGeneration.get()) {
+            return callerRunsTaskCount.get();
+        }
+        return callerRunsTaskCount.incrementAndGet();
+    }
+
+    public synchronized long incrementCompleted(long generation) {
+        if (generation != metricsGeneration.get()) {
+            return completedTaskCount.get();
+        }
+        return completedTaskCount.incrementAndGet();
+    }
+
+    public long currentGeneration() {
+        return metricsGeneration.get();
+    }
+
+    public synchronized void recordWaitNanos(long generation, long nanos) {
+        if (generation != metricsGeneration.get()) {
+            return;
+        }
         waitTimeNanosTotal.addAndGet(Math.max(0, nanos));
         waitSampleCount.incrementAndGet();
     }
 
-    public void recordExecutionNanos(long nanos) {
+    public synchronized void recordExecutionNanos(long generation, long nanos) {
+        if (generation != metricsGeneration.get()) {
+            return;
+        }
         executionTimeNanosTotal.addAndGet(Math.max(0, nanos));
         executionSampleCount.incrementAndGet();
     }
 
-    public void reset() {
+    public synchronized void reset() {
+        metricsGeneration.incrementAndGet();
         submittedTaskCount.set(0);
+        completedTaskCount.set(0);
         rejectedTaskCount.set(0);
+        callerRunsTaskCount.set(0);
         waitTimeNanosTotal.set(0);
         executionTimeNanosTotal.set(0);
         waitSampleCount.set(0);
@@ -45,8 +80,16 @@ public class ThreadPoolCounters {
         return submittedTaskCount.get();
     }
 
+    public long completedTaskCount() {
+        return completedTaskCount.get();
+    }
+
     public long rejectedTaskCount() {
         return rejectedTaskCount.get();
+    }
+
+    public long callerRunsTaskCount() {
+        return callerRunsTaskCount.get();
     }
 
     public double waitTimeMsAvg() {
@@ -69,6 +112,10 @@ public class ThreadPoolCounters {
 
     public Instant metricsResetAt() {
         return metricsResetAt;
+    }
+
+    public long metricsGeneration() {
+        return metricsGeneration.get();
     }
 
     private static double nanosToMillis(long nanos) {

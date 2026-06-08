@@ -113,9 +113,18 @@ public class SegmentIdGenerator {
         }
 
         private void waitForPreloadIfRunning() {
+            long deadline = System.currentTimeMillis() + properties.getPreloadWaitTimeoutMs();
             while (next == null && preloadRunning.get()) {
                 try {
-                    wait();
+                    long waitMs = deadline - System.currentTimeMillis();
+                    if (waitMs <= 0) {
+                        throw new ApiException(
+                                ErrorCode.ID_SEGMENT_ALLOC_FAILED,
+                                HttpStatus.INTERNAL_SERVER_ERROR,
+                                "Timed out while waiting for preloaded ID segment"
+                        );
+                    }
+                    wait(waitMs);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     throw new ApiException(

@@ -48,6 +48,7 @@ class OrderLabControllerTest {
                 .andExpect(jsonPath("$.orderId", is(1)))
                 .andExpect(jsonPath("$.acceptedAsyncTasks", is(1)))
                 .andExpect(jsonPath("$.rejectedAsyncTasks", is(0)))
+                .andExpect(jsonPath("$.callerRunsAsyncTasks", is(0)))
                 .andExpect(jsonPath("$.requestId", notNullValue()));
     }
 }

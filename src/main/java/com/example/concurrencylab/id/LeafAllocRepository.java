@@ -71,7 +71,7 @@ public class LeafAllocRepository {
                     Timestamp.from(Instant.now())
             );
         } catch (RuntimeException ignored) {
-            // Another concurrent request may have inserted the row first.
+            // Another concurrent request may already have inserted this bizTag.
         }
     }
 

@@ -12,6 +12,7 @@ public record ThreadPoolMetricsResponse(
         long completedTaskCount,
         long submittedTaskCount,
         long rejectedTaskCount,
+        long callerRunsTaskCount,
         RejectionPolicy rejectionPolicy,
         long keepAliveSeconds,
         boolean allowCoreThreadTimeOut,
@@ -19,6 +20,7 @@ public record ThreadPoolMetricsResponse(
         double executionTimeMsAvg,
         long waitSampleCount,
         long executionSampleCount,
+        long metricsGeneration,
         Instant metricsResetAt
 ) {
 }

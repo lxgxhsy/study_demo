@@ -17,3 +17,4 @@ concurrency-lab:
     default-step: 1000
     preload-threshold-ratio: 0.1
     max-batch-size: 10000
+    preload-wait-timeout-ms: 5000

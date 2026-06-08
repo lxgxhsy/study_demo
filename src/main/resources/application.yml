@@ -4,12 +4,14 @@ server:
 spring:
   application:
     name: concurrency-lab
+  profiles:
+    default: local-h2
 
 management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,metrics,threaddump
 
 concurrency-lab:
   thread-pool:
