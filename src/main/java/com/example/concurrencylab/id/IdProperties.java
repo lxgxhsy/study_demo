@@ -9,6 +9,7 @@ public class IdProperties {
     private double preloadThresholdRatio = 0.1;
     private int maxBatchSize = 10000;
     private long preloadWaitTimeoutMs = 5000;
+    private int segmentAllocationMaxRetries = 128;
 
     public long getDefaultStep() {
         return defaultStep;
@@ -40,5 +41,13 @@ public class IdProperties {
 
     public void setPreloadWaitTimeoutMs(long preloadWaitTimeoutMs) {
         this.preloadWaitTimeoutMs = preloadWaitTimeoutMs;
+    }
+
+    public int getSegmentAllocationMaxRetries() {
+        return segmentAllocationMaxRetries;
+    }
+
+    public void setSegmentAllocationMaxRetries(int segmentAllocationMaxRetries) {
+        this.segmentAllocationMaxRetries = segmentAllocationMaxRetries;
     }
 }

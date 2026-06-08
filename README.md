@@ -169,3 +169,17 @@ mvn test
 ```
 
 MySQL Leaf 并发验收不能用 H2 代替。需要在 `mysql-leaf` profile 下跑并发 64、总 ID 数至少 `step * 3` 的用例或压测，并保存报告。
+
+仓库已提供默认禁用的 MySQL 集成测试 `MySqlLeafConcurrencyIT`。只有显式设置环境变量后才会连接真实 MySQL：
+
+```powershell
+$env:MYSQL_LEAF_IT_ENABLED='true'
+$env:MYSQL_LEAF_JDBC_URL='jdbc:mysql://localhost:3306/concurrency_lab?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true'
+$env:MYSQL_LEAF_USERNAME='root'
+$env:MYSQL_LEAF_PASSWORD=''
+mvn -Dtest=MySqlLeafConcurrencyIT test
+```
+
+如果本机 MySQL 不监听 3306，把 `MYSQL_LEAF_JDBC_URL` 里的端口改成实际 classic MySQL 端口。
+
+该测试覆盖两件事：64 并发直接分配号段时范围不重叠；64 并发生成总数不少于 `step * 3` 的 ID 时 `duplicateCount=0`。没有真实 MySQL 运行输出时，仍不能把它写成 MySQL/InnoDB 并发证据。

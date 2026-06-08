@@ -1,86 +1,86 @@
-# Multi-Agent Review Notes
+# 多角色评审记录
 
-## Review Goal
+## 评审目标
 
-Use role-specific review to reduce generic AI-generated project drift. Each role argued from its own taste and responsibility, with evidence from the local PRD/OpenSpec/Superpowers documents.
+使用不同角色的评审来减少“泛泛 AI 项目”的漂移。每个角色都从自己的品味和职责出发，并基于本地 PRD、OpenSpec 和 Superpowers 文档提出意见。
 
-## Roles
+## 角色
 
-- PM: demanded a business-shaped story instead of a pure technology checklist.
-- Requirement reviewer: rejected vague acceptance language and asked for measurable criteria.
-- Technical director: pushed for conservative architecture boundaries and explicit tradeoffs.
-- Backend developer: asked for API contracts, DTOs, errors, and a realistic first-week slice.
-- QA: asked for assertions, failure paths, and concurrency test boundaries.
-- Frontend/experience: supported no frontend in version 1, but demanded self-explanatory README, JSON, and reports.
-- SRE: asked for runbook, environment baseline, pressure-test safety bounds, and reproducible reports.
+- PM：要求项目有业务化叙事，而不是纯技术清单。
+- 需求评审：拒绝模糊验收语言，要求可测量标准。
+- 技术负责人：推动保守的架构边界和明确取舍。
+- 后端开发：要求 API 契约、DTO、错误处理和现实的一周内首切片。
+- QA：要求断言、失败路径和并发测试边界。
+- 前端/体验：支持版本一不做前端，但要求 README、JSON 和报告自解释。
+- SRE：要求 runbook、环境基线、压测安全边界和可复现报告。
 
-## Main Disputes and Outcomes
+## 主要争议与结果
 
-### Generic Demo vs Business Domain
+### 通用 demo vs 业务领域
 
-Dispute:
+争议：
 
-- PM argued a standalone dynamic-threadpool/Leaf demo would feel like an interview checklist.
-- Backend wanted to keep the first implementation small.
+- PM 认为单独的动态线程池/Leaf demo 会像面试清单。
+- 后端希望第一阶段实现保持小。
 
-Outcome:
+结果：
 
-- Documentation now frames the project as a high-concurrency order placement lab.
-- Implementation remains small: first week is still the dynamic thread pool loop.
+- 文档现在把项目定义为高并发下单实验。
+- 实现仍保持小范围：第一周仍然是动态线程池闭环。
 
-### Service-Side Benchmark vs External Pressure Test
+### 服务端 benchmark vs 外部压测
 
-Dispute:
+争议：
 
-- Initial architecture included a benchmark module and benchmark endpoints.
-- PM, architecture, and SRE argued this would pollute the measured service.
+- 初始架构包含 benchmark 模块和 benchmark endpoints。
+- PM、架构和 SRE 认为这会污染被测服务。
 
-Outcome:
+结果：
 
-- Version 1 removes service-side benchmark controllers.
-- Pressure testing is external-first with k6.
+- 版本一移除服务端 benchmark controllers。
+- 压测优先采用外部 k6 脚本。
 
-### H2 vs MySQL Evidence
+### H2 vs MySQL 证据
 
-Dispute:
+争议：
 
-- Initial docs allowed H2 first and MySQL later.
-- QA, SRE, and architecture argued H2 cannot prove MySQL/InnoDB segment allocation safety.
+- 初始文档允许先 H2、后 MySQL。
+- QA、SRE 和架构认为 H2 不能证明 MySQL/InnoDB 号段分配安全性。
 
-Outcome:
+结果：
 
-- H2 is documented as functional only.
-- MySQL is required for Leaf concurrency evidence.
+- H2 被明确记录为只做功能验证。
+- Leaf 并发证据必须来自 MySQL。
 
-### Queue Capacity Shrink
+### 队列容量缩容
 
-Dispute:
+争议：
 
-- Initial docs said capacity changes must not drop tasks but did not define shrink behavior.
+- 初始文档说容量变化不能丢任务，但没有定义缩容行为。
 
-Outcome:
+结果：
 
-- Shrinking below current queue size returns HTTP 400 with `QUEUE_CAPACITY_TOO_SMALL`.
+- 当缩小后的容量低于当前队列大小时，返回 HTTP 400 和 `QUEUE_CAPACITY_TOO_SMALL`。
 
-### Metrics and Reports
+### 指标和报告
 
-Dispute:
+争议：
 
-- Initial docs listed metrics but did not define units, windows, or report schema.
+- 初始文档列出了指标，但没有定义单位、窗口或报告 schema。
 
-Outcome:
+结果：
 
-- Thread-pool wait and execution averages are milliseconds since reset.
-- Reports must include full reproducibility context and an interview answer.
+- 线程池等待时间和执行时间平均值均为 reset 以来的毫秒值。
+- 报告必须包含完整可复现上下文和一段面试回答。
 
-## Current Coding Entry
+## 当前编码入口
 
-Start with:
+从以下内容开始：
 
-1. Spring Boot Java 17 skeleton.
-2. `GET /actuator/health`.
-3. Thread pool config read/update.
-4. Thread pool metrics/reset.
-5. Sleep task endpoint.
-6. k6 safe local script.
-7. First reproducible report.
+1. Spring Boot Java 17 骨架。
+2. `GET /actuator/health`。
+3. 线程池配置读取/更新。
+4. 线程池 metrics/reset。
+5. Sleep task endpoint。
+6. k6 安全本地脚本。
+7. 第一份可复现实验报告。

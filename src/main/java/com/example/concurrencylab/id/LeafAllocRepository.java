@@ -7,6 +7,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Isolation;
 
 import java.sql.Timestamp;
 import java.time.Instant;
@@ -22,11 +23,12 @@ public class LeafAllocRepository {
         this.properties = properties;
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public SegmentRange allocateSegment(String bizTag) {
         ensureRow(bizTag);
 
-        for (int attempt = 0; attempt < 5; attempt++) {
+        int maxRetries = Math.max(1, properties.getSegmentAllocationMaxRetries());
+        for (int attempt = 0; attempt < maxRetries; attempt++) {
             LeafAllocRow row = loadRow(bizTag);
             long newMaxId = row.maxId() + row.step();
             int updated = jdbcTemplate.update(
@@ -48,7 +50,7 @@ public class LeafAllocRepository {
         throw new ApiException(
                 ErrorCode.ID_SEGMENT_ALLOC_FAILED,
                 HttpStatus.INTERNAL_SERVER_ERROR,
-                "Failed to allocate ID segment after retries"
+                "Failed to allocate ID segment after retries=" + maxRetries
         );
     }
 

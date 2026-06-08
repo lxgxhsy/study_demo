@@ -140,6 +140,8 @@ MySQL segment allocation must use either:
 - optimistic update with `WHERE version = ?` and retry; or
 - transactional row lock such as `SELECT ... FOR UPDATE`.
 
+The current implementation uses optimistic update with `WHERE version = ?`, `READ_COMMITTED` transaction isolation, and configurable retry count `concurrency-lab.id.segment-allocation-max-retries` (default `128` for `mysql-leaf`). `READ_COMMITTED` is intentional: under MySQL's default `REPEATABLE_READ`, a retry loop inside one transaction can keep reading the original snapshot and fail to observe the version advanced by another allocator.
+
 ## Order Lab Design
 
 The order-lab endpoint is a business wrapper, not a real order system.

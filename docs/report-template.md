@@ -1,6 +1,6 @@
-# Report Template
+# 报告模板
 
-Use this template for every accepted pressure-test report.
+每一份被接受的压测报告都必须使用这个模板。
 
 ```yaml
 experimentName:
@@ -21,10 +21,10 @@ rootCauseExplanation:
 interviewAnswer:
 ```
 
-## Interpretation Checklist
+## 解读检查清单
 
-- What changed compared with the control group?
-- Which metric moved most: QPS, P95, P99, rejected count, wait time, execution time, duplicate count, DB allocation count, or segment switch count?
-- Is the result expected from the technical mechanism?
-- What tradeoff can be explained in an interview?
-- Is the report reproducible from the recorded command and environment?
+- 和对照组相比，发生了什么变化？
+- 变化最大的指标是哪一个：QPS、P95、P99、rejected count、wait time、execution time、duplicate count、DB allocation count，还是 segment switch count？
+- 这个结果是否符合底层技术机制的预期？
+- 哪个取舍可以在面试中讲清楚？
+- 根据记录下来的命令和环境，报告是否可以复现？

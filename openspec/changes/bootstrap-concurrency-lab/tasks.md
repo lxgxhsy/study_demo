@@ -52,7 +52,7 @@
 - [x] Add `GET /api/lab/id/{bizTag}`.
 - [x] Add `POST /api/lab/id/{bizTag}/batch`.
 - [x] Add `GET /api/lab/id/{bizTag}/metrics`.
-- [ ] Add concurrent MySQL-profile duplicate-ID test with concurrency 64 and total IDs at least `step * 3`.
+- [x] Add concurrent MySQL-profile duplicate-ID test with concurrency 64 and total IDs at least `step * 3`.
 
 ## 6. Order Lab Wrapper
 

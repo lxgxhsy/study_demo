@@ -1,73 +1,73 @@
-# Interview Notes
+# 面试笔记
 
-Add one entry after each completed implementation slice.
+每完成一个实现切片后，补充一条记录。
 
-## Template
+## 模板
 
-### Slice
+### 切片
 
-Name:
+名称：
 
-### Business Pressure
+### 业务压力
 
-What pressure does the high-concurrency order lab simulate?
+高并发下单实验模拟了什么压力？
 
-### Technical Choice
+### 技术选择
 
-What implementation choice was made?
+做了什么实现选择？
 
-### Measured Evidence
+### 实测证据
 
-Which report proves the behavior?
+哪份报告证明了这个行为？
 
-### Tradeoff
+### 取舍
 
-What got better, and what got worse?
+什么变好了，什么变差了？
 
-### Interview Answer
+### 面试回答
 
-Three to five sentences that can be said directly in an interview.
+三到五句话，可以直接在面试中表达。
 
-## 2026-06-08: Dynamic Thread Pool First Slice
+## 2026-06-08：动态线程池第一切片
 
-### Business Pressure
+### 业务压力
 
-The order lab simulates high-concurrency requests that generate orders and enqueue asynchronous side work.
+order lab 模拟高并发请求生成订单，并把订单侧异步工作放入队列执行。
 
-### Technical Choice
+### 技术选择
 
-The first implementation slice focuses on a dynamic thread pool before Leaf ID, because queue backlog, rejection, metrics reset, and task submission form the shortest measurable loop.
+第一段实现先做动态线程池，再做 Leaf ID，因为队列积压、拒绝策略、指标 reset 和任务提交构成了最短的可测闭环。
 
-### Measured Evidence
+### 实测证据
 
-Current evidence: `mvn test` passes for application startup, health, config read/update validation, queue shrink rejection, unsupported rejection policy, sleep task submission, caller-runs accounting, and metrics reset generation isolation. The packaged jar also passed `scripts/smoke-thread-pool.ps1` over real HTTP. A real k6 report is still pending because k6 is not installed locally.
+当前证据：`mvn test` 已通过，覆盖应用启动、health、配置读取/更新校验、队列非法缩容拒绝、不支持的拒绝策略、sleep task 提交、caller-runs 计数和 metrics reset generation 隔离。打包后的 jar 也通过了真实 HTTP 下的 `scripts/smoke-thread-pool.ps1`。真实 k6 报告仍未完成，因为本地尚未安装 k6。
 
-### Tradeoff
+### 取舍
 
-Starting with the thread pool delays the full order-ID story, but it prevents Leaf and pressure-test code from being built on vague API and metrics contracts.
+先从线程池开始会推迟完整订单 ID 故事，但可以避免 Leaf 和压测代码建立在模糊的 API 与指标契约上。
 
-### Interview Answer
+### 面试回答
 
-I did not start by building a large order system. I first isolated the async workload path, made the thread pool configurable at runtime, and exposed metrics that show queue size, rejection count, caller-runs count, wait time, and execution time. Reset starts a new metrics generation, so old tasks cannot pollute a new experiment window. This lets me pressure-test how queue size and rejection policy change latency and backpressure before mixing in distributed ID generation.
+我没有一开始就做一个庞大的订单系统，而是先隔离异步工作路径，让线程池可以在运行时调整，并暴露队列大小、拒绝数、caller-runs 数、等待时间和执行时间等指标。reset 会开启新的 metrics generation，所以旧任务不会污染新的实验窗口。这样在引入分布式 ID 之前，我就能先压测队列容量和拒绝策略如何影响延迟与背压。
 
-## 2026-06-08: Leaf Segment Functional Slice
+## 2026-06-08：Leaf 号段功能切片
 
-### Business Pressure
+### 业务压力
 
-The order lab needs IDs without hitting the database for every request, while still avoiding duplicates when traffic crosses segment boundaries.
+order lab 需要在高并发下生成订单 ID，不能每次请求都打数据库，同时还要在跨号段时避免重复。
 
-### Technical Choice
+### 技术选择
 
-The implementation uses database-backed segment allocation with an in-memory current segment and async next-segment preload. Waiting for a running preload is bounded by `preload-wait-timeout-ms`, so request threads do not wait forever behind a stalled allocation.
+实现采用数据库支撑的号段分配，内存中持有当前号段，并异步预加载下一号段。号段分配使用 `WHERE version = ?` 乐观更新、`READ_COMMITTED` 隔离级别和可配置重试预算。等待正在运行的预加载会受 `preload-wait-timeout-ms` 限制，避免请求线程无限等待卡住的分配。
 
-### Measured Evidence
+### 实测证据
 
-Current evidence: `IdLabControllerTest` passes under `local-h2`, including an 8-thread functional duplicate check across multiple segment switches. This is not MySQL/InnoDB concurrency proof.
+当前证据：`IdLabControllerTest` 在 `local-h2` 下通过，包括一个 8 线程、跨多个号段切换的功能性重复 ID 检查。`MySqlLeafConcurrencyIT` 已存在，用于真实 MySQL 验证，并由 `MYSQL_LEAF_IT_ENABLED=true` 控制；在真实 MySQL 下运行并保存输出之前，它还不能作为 MySQL/InnoDB 并发证明。
 
-### Tradeoff
+### 取舍
 
-Segment allocation reduces database pressure during ID generation, but it introduces segment waste risk and a database allocation boundary that must be validated under the real MySQL profile.
+号段分配降低了 ID 生成期间的数据库压力，但引入了号段浪费风险和数据库分配边界，因此必须在真实 MySQL profile 下验证。
 
-### Interview Answer
+### 面试回答
 
-I used a Leaf-style segment generator so most ID requests are served from memory and the database is touched only when allocating a new range. The local H2 test proves the functional path and catches basic duplicate regressions, but I would not present it as InnoDB row-lock or optimistic-update proof. For production-grade evidence, I still need a MySQL-profile run with enough concurrent IDs to cross at least three segments.
+我使用 Leaf 风格的号段生成器，让大多数 ID 请求都在内存中完成，只有申请新号段时才访问数据库。号段分配通过 `version` 乐观更新保护，重试循环运行在 `READ_COMMITTED` 下，能看到其他事务已经提交的分配进度。本地 H2 测试证明功能链路并捕获基础重复 ID 回归，而 gated MySQL 集成测试才是获得真实 InnoDB 证据的路径。只有在运行 MySQL profile 并保存输出后，我才会把它作为生产级并发证据来讲。

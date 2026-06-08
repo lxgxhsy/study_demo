@@ -1,117 +1,117 @@
-# Decision Log
+# 决策日志
 
-This file records why project direction changed. Keep entries short, concrete, and tied to implementation consequences.
+本文记录项目方向为什么发生变化。每条记录应短、具体，并说明对实现的影响。
 
-## 2026-06-08: Reframe as High-Concurrency Order Lab
+## 2026-06-08：重塑为高并发下单实验项目
 
-Decision:
+决策：
 
-- Reframe the project from a generic concurrency demo to a backend-only high-concurrency order placement lab.
+- 将项目从通用并发 demo 重塑为后端-only 的高并发下单实验项目。
 
-Why:
+原因：
 
-- PM review argued that a pure "dynamic thread pool + Leaf ID" demo would look like technical checklist work.
-- The order scenario gives the project a business pressure: order ID generation and asynchronous order-side work under load.
+- PM 评审认为，单纯的“动态线程池 + Leaf ID”demo 看起来更像技术清单。
+- 下单场景能给项目一个业务压力来源：高负载下的订单 ID 生成和订单侧异步任务。
 
-Implementation consequence:
+实现后果：
 
-- Add `orderlab` as a module.
-- Keep the order scope narrow: generate order ID, submit one async side task, expose metrics.
-- Do not add payment, inventory persistence, users, or real downstream integration.
+- 新增 `orderlab` 模块。
+- 订单范围保持克制：生成订单 ID、提交一个异步 side task、暴露指标。
+- 不加入支付、库存持久化、用户体系或真实下游集成。
 
-## 2026-06-08: Remove Service-Side Benchmark Controller from Version 1
+## 2026-06-08：版本一移除服务端 benchmark controller
 
-Decision:
+决策：
 
-- Do not implement `BenchmarkController` in version 1.
+- 版本一不实现 `BenchmarkController`。
 
-Why:
+原因：
 
-- Architecture, PM, and SRE review agreed that service-side benchmark endpoints pollute the measured service resources.
-- External k6 scripts are cleaner because the service only exposes the system under test.
+- 架构、PM 和 SRE 评审一致认为，服务端 benchmark endpoint 会污染被测服务资源。
+- 外部 k6 脚本更干净，因为服务端只暴露被测系统本身。
 
-Implementation consequence:
+实现后果：
 
-- Use `scripts/k6/` for load scripts.
-- Save reports under `reports/YYYYMMDD-HHmmss-<experiment>/`.
-- Keep backend APIs focused on thread pool, ID, metrics, and order lab.
+- 使用 `scripts/k6/` 存放压测脚本。
+- 报告保存到 `reports/YYYYMMDD-HHmmss-<experiment>/`。
+- 后端 API 聚焦在线程池、ID、指标和 order lab。
 
-## 2026-06-08: Queue Shrink Below Current Size Is Rejected
+## 2026-06-08：拒绝把队列容量缩小到当前队列大小以下
 
-Decision:
+决策：
 
-- If `newQueueCapacity < currentQueueSize`, return HTTP 400 with `QUEUE_CAPACITY_TOO_SMALL`.
+- 如果 `newQueueCapacity < currentQueueSize`，返回 HTTP 400 和 `QUEUE_CAPACITY_TOO_SMALL`。
 
-Why:
+原因：
 
-- Requirement, backend, QA, and architecture review all flagged queue shrink semantics as ambiguous.
-- Rejecting the update is simpler, testable, and avoids dropping queued tasks.
+- 需求、后端、QA 和架构评审都指出队列缩容语义不明确。
+- 拒绝更新更简单、可测试，并且避免丢弃已排队任务。
 
-Implementation consequence:
+实现后果：
 
-- `ResizableCapacityBlockingQueue#setCapacity` must reject invalid shrink.
-- Config update must be atomic from the user's perspective: failed update leaves existing config unchanged.
+- `ResizableCapacityBlockingQueue#setCapacity` 必须拒绝非法缩容。
+- 从用户视角看，配置更新必须是原子的：更新失败后现有配置保持不变。
 
-## 2026-06-08: Metrics Use Reset-Scoped Cumulative Averages
+## 2026-06-08：指标使用 reset-scoped 累计平均值
 
-Decision:
+决策：
 
-- `waitTimeMsAvg` and `executionTimeMsAvg` are cumulative averages since the last metrics reset.
+- `waitTimeMsAvg` 和 `executionTimeMsAvg` 表示自上次 metrics reset 以来的累计平均值。
 
-Why:
+原因：
 
-- Reviewers rejected vague "average wait time" wording.
-- Reset-scoped cumulative averages are easier to implement and explain than rolling windows.
+- 评审拒绝了含糊的“平均等待时间”表述。
+- reset-scoped 累计平均值比 rolling window 更容易实现，也更容易解释。
 
-Implementation consequence:
+实现后果：
 
-- Expose `waitSampleCount`, `executionSampleCount`, and `metricsResetAt`.
-- Metrics reset clears cumulative counters but must not falsify real-time values like active threads and queue size.
+- 暴露 `waitSampleCount`、`executionSampleCount` 和 `metricsResetAt`。
+- metrics reset 会清空累计计数器，但不能伪造 active threads、queue size 这类实时值。
 
-## 2026-06-08: H2 Is Functional Only, MySQL Proves Leaf Concurrency
+## 2026-06-08：H2 只用于功能验证，MySQL 用于证明 Leaf 并发语义
 
-Decision:
+决策：
 
-- Use `local-h2` for startup and functional flow.
-- Use `mysql-leaf` for real Leaf segment allocation concurrency validation.
+- 使用 `local-h2` 做启动和功能链路验证。
+- 使用 `mysql-leaf` 做真实 Leaf 号段分配并发验证。
 
-Why:
+原因：
 
-- H2 cannot be treated as evidence for MySQL/InnoDB row-lock or optimistic-update behavior.
-- Leaf ID safety is about segment allocation under database concurrency, not only in-memory `AtomicLong`.
+- H2 不能被当作 MySQL/InnoDB 行锁或乐观更新行为的证据。
+- Leaf ID 安全性关注的是数据库并发下的号段分配，不只是内存里的 `AtomicLong`。
 
-Implementation consequence:
+实现后果：
 
-- MySQL-profile tests must cover concurrent segment allocation.
-- Leaf duplicate-ID acceptance requires concurrency 64 and total IDs at least `step * 3`.
+- MySQL profile 测试必须覆盖并发号段分配。
+- Leaf 无重复 ID 验收需要并发 64，并且总 ID 数至少为 `step * 3`。
 
-## 2026-06-08: k6 Is the First Pressure-Test Tool
+## 2026-06-08：k6 是版本一首选压测工具
 
-Decision:
+决策：
 
-- Use k6 for version-1 pressure tests.
+- 版本一压测使用 k6。
 
-Why:
+原因：
 
-- k6 fits JSON POST APIs, P95/P99 reporting, custom metrics, thresholds, and script-readable payloads.
-- JMeter and wrk can be evaluated later but are not needed for the first slice.
+- k6 适合 JSON POST API、P95/P99 报告、自定义指标、阈值和脚本化 payload。
+- JMeter 和 wrk 可以后续评估，但第一阶段不需要。
 
-Implementation consequence:
+实现后果：
 
-- Add k6 scripts before calling a concurrency slice complete.
-- If k6 is not installed locally, scripts still exist and Maven tests remain the minimum verification path.
+- 在宣称并发切片完成前，需要加入 k6 脚本。
+- 如果本地没有安装 k6，脚本仍然应存在，Maven 测试仍作为最低验证路径。
 
-## 2026-06-08: Reports Must Be Reproducible
+## 2026-06-08：报告必须可复现
 
-Decision:
+决策：
 
-- A report missing required context is not accepted as evidence.
+- 缺少必要上下文的报告不能被接受为证据。
 
-Why:
+原因：
 
-- QA and SRE review rejected bare QPS/P99 numbers without environment, command, payload, and config snapshots.
+- QA 和 SRE 评审拒绝只有 QPS/P99 数字、没有环境、命令、payload 和配置快照的报告。
 
-Implementation consequence:
+实现后果：
 
-- Use `docs/report-template.md`.
-- Record command, payload, JDK, CPU, heap, profile, config, raw summary, observation, root-cause explanation, and interview answer.
+- 使用 `docs/report-template.md`。
+- 记录命令、payload、JDK、CPU、heap、profile、配置、原始 summary、观察、根因解释和面试回答。

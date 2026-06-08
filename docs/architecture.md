@@ -1,27 +1,27 @@
-# Architecture Skeleton
+# 架构骨架
 
-## Domain
+## 领域定位
 
-Concurrency Lab is framed as a high-concurrency order placement lab.
+Concurrency Lab 被定义为一个高并发下单实验项目。
 
-The order domain is intentionally narrow:
+订单领域被刻意收窄，只保留和并发压力有关的最小链路：
 
-- Generate an order ID.
-- Submit one asynchronous order-side task.
-- Expose metrics.
-- Pressure-test the behavior.
+- 生成订单 ID。
+- 提交一个订单侧异步任务。
+- 暴露可观测指标。
+- 对行为进行压测。
 
-It is not a payment, inventory, user, or production order system.
+它不是支付系统、库存系统、用户系统，也不是生产级订单系统。
 
-## Modules
+## 模块
 
-### Dynamic Thread Pool
+### 动态线程池
 
-Purpose:
+目的：
 
-- Show how core size, max size, queue capacity, and rejection policy affect backlog, rejection, wait time, execution time, and P99 latency.
+- 展示 `corePoolSize`、`maxPoolSize`、队列容量和拒绝策略如何影响积压、拒绝、等待时间、执行时间和 P99 延迟。
 
-Main objects:
+主要对象：
 
 - `DynamicThreadPoolManager`
 - `MonitoredThreadPoolExecutor`
@@ -33,17 +33,17 @@ Main objects:
 - `TaskSubmissionResponse`
 - `ThreadPoolLabController`
 
-Key first-version decision:
+版本一关键决策：
 
-- Reject queue capacity shrink when `newQueueCapacity < currentQueueSize`.
+- 当 `newQueueCapacity < currentQueueSize` 时，拒绝缩小队列容量。
 
 ### Leaf ID
 
-Purpose:
+目的：
 
-- Show how segment allocation reduces database pressure while preserving uniqueness for order IDs.
+- 展示号段分配如何在保持订单 ID 唯一性的同时减少数据库压力。
 
-Main objects:
+主要对象：
 
 - `IdGenerator`
 - `SegmentIdGenerator`
@@ -53,18 +53,18 @@ Main objects:
 - `LeafIdMetrics`
 - `IdLabController`
 
-Validation boundary:
+验证边界：
 
-- H2 validates local function.
-- MySQL validates real segment allocation concurrency.
+- H2 只验证本地功能链路。
+- MySQL 用来验证真实号段分配并发语义。
 
 ### Order Lab
 
-Purpose:
+目的：
 
-- Give the concurrency experiments a business-shaped story without building a full order system.
+- 给并发实验一个业务化场景，而不是构建完整订单系统。
 
-Main objects:
+主要对象：
 
 - `OrderLabController`
 - `OrderLabService`
@@ -73,17 +73,17 @@ Main objects:
 
 ### Support
 
-Purpose:
+目的：
 
-- Keep cross-cutting API error and time utilities out of the core modules.
+- 将跨模块的 API 错误处理和时间工具留在核心模块之外。
 
-Main objects:
+主要对象：
 
 - `ApiErrorResponse`
 - `ErrorCode`
 - `ClockProvider`
 
-## API Draft
+## API 草案
 
 ```text
 GET  /api/lab/thread-pool/config
@@ -101,26 +101,26 @@ GET  /api/lab/id/{bizTag}/metrics
 POST /api/lab/orders
 ```
 
-Version 1 does not include:
+版本一不包含：
 
 ```text
 POST /api/lab/benchmark/thread-pool
 POST /api/lab/benchmark/id
 ```
 
-Pressure tests are external k6 scripts.
+压测由外部 k6 脚本完成。
 
-## First Coding Slice
+## 第一段编码切片
 
-1. Bootstrap Spring Boot app.
-2. Add `GET /actuator/health`.
-3. Add dynamic thread pool with fixed initial config.
-4. Add config read/update endpoint.
-5. Add metrics endpoint.
-6. Add metrics reset endpoint.
-7. Add sleep task submission endpoint.
-8. Add one safe k6 pressure-test script.
-9. Save one reproducible report.
-10. Add one interview note.
+1. 搭建 Spring Boot 应用骨架。
+2. 添加 `GET /actuator/health`。
+3. 添加固定初始配置的动态线程池。
+4. 添加配置读取/更新接口。
+5. 添加指标接口。
+6. 添加指标 reset 接口。
+7. 添加 sleep task 提交接口。
+8. 添加一个安全的 k6 压测脚本。
+9. 保存一份可复现实验报告。
+10. 添加一份面试笔记。
 
-Leaf ID starts after the dynamic thread pool loop is measurable.
+Leaf ID 在动态线程池闭环可测量之后再开始。

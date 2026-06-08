@@ -18,3 +18,4 @@ concurrency-lab:
     preload-threshold-ratio: 0.1
     max-batch-size: 10000
     preload-wait-timeout-ms: 5000
+    segment-allocation-max-retries: 128
